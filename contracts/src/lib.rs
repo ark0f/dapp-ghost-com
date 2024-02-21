@@ -6,14 +6,14 @@ use alloc::collections::BTreeMap;
 use gstd::{msg, ActorId};
 use io::{HandleIn, HandleOut};
 
-static mut STATES: BTreeMap<ActorId, State> = BTreeMap::new();
+static mut STATES: BTreeMap<(ActorId, ActorId), State> = BTreeMap::new();
 
-fn states() -> &'static mut BTreeMap<ActorId, State> {
+fn states() -> &'static mut BTreeMap<(ActorId, ActorId), State> {
     unsafe { &mut STATES }
 }
 
 enum State {
-    HandshakeStarted { remote: ActorId },
+    HandshakeStarted,
     RespondedToInitiator,
 }
 
@@ -37,7 +37,7 @@ extern "C" fn handle() {
                 0,
             )
             .unwrap();
-            states().insert(initiator, State::HandshakeStarted { remote });
+            states().insert((initiator, remote), State::HandshakeStarted);
         }
         HandleIn::RespondToInitiator {
             initiator,
@@ -45,20 +45,16 @@ extern "C" fn handle() {
         } => {
             let remote = msg::source();
 
-            let Some(state) = states().get(&initiator) else {
-                panic!("Session not found for the initiator");
+            let Some(state) = states().get(&(initiator, remote)) else {
+                panic!("Session not found for the initiator and the remote");
             };
 
-            let saved_remote = match state {
-                State::HandshakeStarted { remote } => remote,
+            match state {
+                State::HandshakeStarted => {}
                 State::RespondedToInitiator { .. } => {
                     panic!("Handshake negotiation sequence violated");
                 }
             };
-
-            if *saved_remote != remote {
-                panic!("Your address is not associated with the initiator")
-            }
 
             msg::send(
                 initiator,
@@ -67,7 +63,7 @@ extern "C" fn handle() {
             )
             .unwrap();
 
-            states().insert(initiator, State::RespondedToInitiator);
+            states().insert((initiator, remote), State::RespondedToInitiator);
         }
         HandleIn::RespondToRemote {
             remote,
@@ -75,12 +71,12 @@ extern "C" fn handle() {
         } => {
             let initiator = msg::source();
 
-            let Some(state) = states().get(&initiator) else {
+            let Some(state) = states().get(&(initiator, remote)) else {
                 panic!("Session not found for the initiator");
             };
 
             match state {
-                State::HandshakeStarted { .. } => {
+                State::HandshakeStarted => {
                     panic!("Handshake negotiation sequence violated");
                 }
                 State::RespondedToInitiator => {}
@@ -95,7 +91,7 @@ extern "C" fn handle() {
             )
             .unwrap();
 
-            states().remove(&initiator);
+            states().remove(&(initiator, remote));
         }
     }
 }
@@ -138,7 +134,9 @@ mod tests {
         );
 
         let remote_mailbox = system.get_mailbox(REMOTE);
-        let expected_message = Log::builder().payload_bytes(initiator_public_key);
+        let expected_message = Log::builder().payload(HandleOut::InitiatorPublicKey {
+            initiator_public_key,
+        });
         assert!(remote_mailbox.contains(&expected_message));
 
         // respond to initiator
@@ -151,7 +149,8 @@ mod tests {
         );
 
         let initiator_mailbox = system.get_mailbox(INITIATOR);
-        let expected_message = Log::builder().payload_bytes(remote_enc_signal);
+        let expected_message =
+            Log::builder().payload(HandleOut::RemoteEncodedSignal { remote_enc_signal });
         assert!(initiator_mailbox.contains(&expected_message));
 
         // respond to remote
@@ -164,7 +163,9 @@ mod tests {
         );
 
         let remote = system.get_mailbox(REMOTE);
-        let expected_message = Log::builder().payload_bytes(initiator_enc_signal);
+        let expected_message = Log::builder().payload(HandleOut::InitiatorEncodedSignal {
+            initiator_enc_signal,
+        });
         assert!(remote.contains(&expected_message));
     }
 }
