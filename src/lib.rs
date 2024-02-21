@@ -3,8 +3,8 @@
 extern crate alloc;
 
 use alloc::collections::BTreeMap;
-use alloc::vec::Vec;
-use gstd::{msg, ActorId, Decode, Encode};
+use gstd::{msg, ActorId};
+use io::{HandleIn, HandleOut};
 
 static mut STATES: BTreeMap<ActorId, State> = BTreeMap::new();
 
@@ -17,41 +17,29 @@ enum State {
     RespondedToInitiator,
 }
 
-#[derive(Debug, Encode, Decode)]
-enum HandleAction {
-    StartHandshake {
-        remote: ActorId,
-        /// DER format
-        initiator_public_key: Vec<u8>,
-    },
-    RespondToInitiator {
-        initiator: ActorId,
-        /// WebRTC signal/code
-        remote_enc_signal: Vec<u8>,
-    },
-    RespondToRemote {
-        remote: ActorId,
-        /// WebRTC signal/code
-        initiator_enc_signal: Vec<u8>,
-    },
-}
-
 #[no_mangle]
 extern "C" fn init() {}
 
 #[no_mangle]
 extern "C" fn handle() {
-    let action: HandleAction = msg::load().unwrap();
+    let action: HandleIn = msg::load().unwrap();
     match action {
-        HandleAction::StartHandshake {
+        HandleIn::StartHandshake {
             remote,
             initiator_public_key,
         } => {
             let initiator = msg::source();
-            msg::send_bytes(remote, initiator_public_key, 0).unwrap();
+            msg::send(
+                remote,
+                HandleOut::InitiatorPublicKey {
+                    initiator_public_key,
+                },
+                0,
+            )
+            .unwrap();
             states().insert(initiator, State::HandshakeStarted { remote });
         }
-        HandleAction::RespondToInitiator {
+        HandleIn::RespondToInitiator {
             initiator,
             remote_enc_signal,
         } => {
@@ -72,11 +60,16 @@ extern "C" fn handle() {
                 panic!("Your address is not associated with the initiator")
             }
 
-            msg::send_bytes(initiator, remote_enc_signal, 0).unwrap();
+            msg::send(
+                initiator,
+                HandleOut::RemoteEncodedSignal { remote_enc_signal },
+                0,
+            )
+            .unwrap();
 
             states().insert(initiator, State::RespondedToInitiator);
         }
-        HandleAction::RespondToRemote {
+        HandleIn::RespondToRemote {
             remote,
             initiator_enc_signal,
         } => {
@@ -93,7 +86,14 @@ extern "C" fn handle() {
                 State::RespondedToInitiator => {}
             };
 
-            msg::send_bytes(remote, initiator_enc_signal, 0).unwrap();
+            msg::send(
+                remote,
+                HandleOut::InitiatorEncodedSignal {
+                    initiator_enc_signal,
+                },
+                0,
+            )
+            .unwrap();
 
             states().remove(&initiator);
         }
@@ -131,7 +131,7 @@ mod tests {
         // start handshake
         program.send(
             INITIATOR,
-            HandleAction::StartHandshake {
+            HandleIn::StartHandshake {
                 remote: REMOTE.into(),
                 initiator_public_key: initiator_public_key.clone(),
             },
@@ -144,7 +144,7 @@ mod tests {
         // respond to initiator
         program.send(
             REMOTE,
-            HandleAction::RespondToInitiator {
+            HandleIn::RespondToInitiator {
                 initiator: INITIATOR.into(),
                 remote_enc_signal: remote_enc_signal.clone(),
             },
@@ -157,7 +157,7 @@ mod tests {
         // respond to remote
         program.send(
             INITIATOR,
-            HandleAction::RespondToRemote {
+            HandleIn::RespondToRemote {
                 remote: REMOTE.into(),
                 initiator_enc_signal: initiator_enc_signal.clone(),
             },

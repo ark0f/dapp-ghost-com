@@ -1,5 +1,5 @@
 [workspace]
-members = ["cli"]
+members = ["cli", "io"]
 
 [package]
 name = "ghost-com"
@@ -10,10 +10,11 @@ edition = "2021"
 
 [dependencies]
 gstd = "1.1.1"
-parity-scale-codec = { version = "3.6.9", default-features = false }
+io = { path = "io" }
 
 [dev-dependencies]
 gtest = "1.1.1"
 
 [build-dependencies]
 gear-wasm-builder = "1.1.1"
+io = { path = "io" }
