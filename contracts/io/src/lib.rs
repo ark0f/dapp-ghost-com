@@ -39,7 +39,14 @@ pub enum HandleIn {
 
 #[derive(Debug, Encode, Decode, TypeInfo)]
 pub enum HandleOut {
-    InitiatorPublicKey { initiator_public_key: Vec<u8> },
-    RemoteEncodedSignal { remote_enc_signal: Vec<u8> },
-    InitiatorEncodedSignal { initiator_enc_signal: Vec<u8> },
+    HandshakeRequested {
+        initiator: ActorId,
+        initiator_public_key: Vec<u8>,
+    },
+    RemoteEncodedSignal {
+        remote_enc_signal: Vec<u8>,
+    },
+    InitiatorEncodedSignal {
+        initiator_enc_signal: Vec<u8>,
+    },
 }

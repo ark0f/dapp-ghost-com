@@ -31,7 +31,8 @@ extern "C" fn handle() {
             let initiator = msg::source();
             msg::send(
                 remote,
-                HandleOut::InitiatorPublicKey {
+                HandleOut::HandshakeRequested {
+                    initiator,
                     initiator_public_key,
                 },
                 0,
@@ -134,7 +135,7 @@ mod tests {
         );
 
         let remote_mailbox = system.get_mailbox(REMOTE);
-        let expected_message = Log::builder().payload(HandleOut::InitiatorPublicKey {
+        let expected_message = Log::builder().payload(HandleOut::HandshakeRequested {
             initiator_public_key,
         });
         assert!(remote_mailbox.contains(&expected_message));
