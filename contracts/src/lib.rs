@@ -37,11 +37,12 @@ extern "C" fn handle() {
                 },
                 0,
             )
-            .unwrap();
+                .unwrap();
             states().insert((initiator, remote), State::HandshakeStarted);
         }
-        HandleIn::RespondToInitiator {
+        HandleIn::InitialSignalCreated {
             initiator,
+            remote_public_key,
             remote_enc_signal,
         } => {
             let remote = msg::source();
@@ -59,14 +60,17 @@ extern "C" fn handle() {
 
             msg::send(
                 initiator,
-                HandleOut::RemoteEncodedSignal { remote_enc_signal },
+                HandleOut::RemoteEncodedSignal {
+                    remote_public_key,
+                    remote_enc_signal,
+                },
                 0,
             )
-            .unwrap();
+                .unwrap();
 
             states().insert((initiator, remote), State::RespondedToInitiator);
         }
-        HandleIn::RespondToRemote {
+        HandleIn::PairedSignalCreated {
             remote,
             initiator_enc_signal,
         } => {
@@ -90,7 +94,7 @@ extern "C" fn handle() {
                 },
                 0,
             )
-            .unwrap();
+                .unwrap();
 
             states().remove(&(initiator, remote));
         }
@@ -120,6 +124,7 @@ mod tests {
 
         let initiator_public_key = vec![1, 2, 3];
         let initiator_enc_signal = vec![4, 5, 6];
+        let remote_public_key = vec![7, 8, 9];
         let remote_enc_signal = vec![3, 2, 1];
 
         // init
@@ -136,6 +141,7 @@ mod tests {
 
         let remote_mailbox = system.get_mailbox(REMOTE);
         let expected_message = Log::builder().payload(HandleOut::HandshakeRequested {
+            initiator: INITIATOR.into(),
             initiator_public_key,
         });
         assert!(remote_mailbox.contains(&expected_message));
@@ -143,21 +149,24 @@ mod tests {
         // respond to initiator
         program.send(
             REMOTE,
-            HandleIn::RespondToInitiator {
+            HandleIn::InitialSignalCreated {
                 initiator: INITIATOR.into(),
                 remote_enc_signal: remote_enc_signal.clone(),
+                remote_public_key: remote_public_key.clone(),
             },
         );
 
         let initiator_mailbox = system.get_mailbox(INITIATOR);
-        let expected_message =
-            Log::builder().payload(HandleOut::RemoteEncodedSignal { remote_enc_signal });
+        let expected_message = Log::builder().payload(HandleOut::RemoteEncodedSignal {
+            remote_enc_signal,
+            remote_public_key,
+        });
         assert!(initiator_mailbox.contains(&expected_message));
 
         // respond to remote
         program.send(
             INITIATOR,
-            HandleIn::RespondToRemote {
+            HandleIn::PairedSignalCreated {
                 remote: REMOTE.into(),
                 initiator_enc_signal: initiator_enc_signal.clone(),
             },

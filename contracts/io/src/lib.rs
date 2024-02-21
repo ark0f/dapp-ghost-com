@@ -22,17 +22,15 @@ impl Metadata for ProgramMetadata {
 pub enum HandleIn {
     StartHandshake {
         remote: ActorId,
-        /// DER format
         initiator_public_key: Vec<u8>,
     },
-    RespondToInitiator {
+    InitialSignalCreated {
         initiator: ActorId,
-        /// WebRTC signal/code
         remote_enc_signal: Vec<u8>,
+        remote_public_key: Vec<u8>,
     },
-    RespondToRemote {
+    PairedSignalCreated {
         remote: ActorId,
-        /// WebRTC signal/code
         initiator_enc_signal: Vec<u8>,
     },
 }
@@ -45,6 +43,7 @@ pub enum HandleOut {
     },
     RemoteEncodedSignal {
         remote_enc_signal: Vec<u8>,
+        remote_public_key: Vec<u8>,
     },
     InitiatorEncodedSignal {
         initiator_enc_signal: Vec<u8>,
